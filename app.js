@@ -51,7 +51,8 @@
     var t = null;
     if (parts.length === 3) {
       var hm = String(e.hora || "").split(":");
-      var d = new Date(+parts[2], +parts[1] - 1, +parts[0], +hm[0] || 0, +hm[1] || 0);
+      var hh = hm[0] === "" || hm[0] === undefined ? 12 : (+hm[0] || 0); // sin hora → mediodía
+      var d = new Date(+parts[2], +parts[1] - 1, +parts[0], hh, +hm[1] || 0);
       t = isNaN(d.getTime()) ? null : d.getTime();
     }
     return { t: t, fecha: e.fecha || "", hora: e.hora || "", peso: peso, nota: e.comentario || "" };
