@@ -74,6 +74,22 @@
         </ul>
       </section>
 
+      <section class="chart-panel" id="projPanel" aria-labelledby="projTitle">
+        <div class="chart-head">
+          <h2 id="projTitle">Proyección</h2>
+          <button type="button" class="remeasure" id="remeasureBtn">Remedir</button>
+        </div>
+        <p class="proj-summary" id="projSummary">—</p>
+        <div class="chart-wrap" id="projWrap">
+          <svg id="projChart" role="img" aria-label="Gráfico de proyección del peso"></svg>
+          <div class="tooltip" id="projTip" hidden></div>
+        </div>
+        <ul class="legend">
+          <li><span class="k k-proj"></span> proyección</li>
+          <li><span class="k k-line"></span> peso real</li>
+        </ul>
+      </section>
+
       <section class="stats" id="stats" aria-label="Resumen"></section>
 
       <section class="history" aria-labelledby="histTitle">
@@ -99,8 +115,9 @@
     <p class="noscript">Necesitás JavaScript activado para usar BodyTracker.</p>
   </noscript>
 
-  <script src="config.js"></script>
-  <script src="bt-core.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=20261011"></script>
+  <script src="bt-core.js?v=20261011"></script>
+  <script src="proyeccion.js?v=20261011"></script>
+  <script src="app.js?v=20261011"></script>
 </body>
 </html>

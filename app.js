@@ -4,10 +4,12 @@
   "use strict";
 
   var DOMINIO = "pesos";
-  var state = { entries: [], range: "all" };
+  var state = { entries: [], range: "all", projBase: null };
 
-  var C = { grid: "#eceee9", muted: "#8b9199", ink: "#14161b", accent: "#2b49e0", panel: "#ffffff", tint: "#e9ecfb" };
+  var C = { grid: "#eceee9", muted: "#8b9199", ink: "#14161b", accent: "#2b49e0", panel: "#ffffff", tint: "#e9ecfb", proj: "#7a3fd1" };
   var HISTORY_N = 15;
+  var PROJ_N = 16; // 4 meses en pasos semanales
+  var LS_BASE = "bt_proy_base";
 
   function $(id) { return document.getElementById(id); }
 
@@ -16,6 +18,8 @@
   function init() {
     $("logForm").addEventListener("submit", onSubmit);
     $("logoutBtn").addEventListener("click", onLogout);
+    $("remeasureBtn").addEventListener("click", onRemeasure);
+    state.projBase = loadBase();
     var rangeButtons = document.querySelectorAll("#range button");
     rangeButtons.forEach(function (b) {
       b.addEventListener("click", function () {
@@ -24,7 +28,7 @@
         renderChart();
       });
     });
-    window.addEventListener("resize", debounce(renderChart, 150));
+    window.addEventListener("resize", debounce(function () { renderChart(); renderProjection(); }, 150));
 
     // bt-core muestra el gate si hace falta y llama a onReady cuando hay acceso.
     bt.init({
@@ -93,6 +97,7 @@
     renderStats();
     renderHistory();
     renderChart();
+    renderProjection();
   }
 
   /* ───────────────── Formulario ───────────────── */
@@ -326,6 +331,165 @@
     tip.hidden = false;
     tip.style.left = clamp(px, 56, geom.W - 56) + "px";
     tip.style.top = py + "px";
+  }
+
+  /* ───────────────── Proyección ───────────────── */
+
+  function loadBase() {
+    try {
+      var raw = localStorage.getItem(LS_BASE);
+      if (!raw) return null;
+      var b = JSON.parse(raw);
+      if (!b || !isFinite(b.t) || !isFinite(b.peso)) return null;
+      return b;
+    } catch (e) { return null; }
+  }
+
+  function saveBase(b) {
+    state.projBase = b;
+    try {
+      if (b) localStorage.setItem(LS_BASE, JSON.stringify(b));
+      else localStorage.removeItem(LS_BASE);
+    } catch (e) {}
+  }
+
+  function onRemeasure() {
+    var list = sorted();
+    if (!list.length) return;
+    var last = list[list.length - 1];
+    saveBase({ t: last.t, peso: last.peso, fecha: last.fecha });
+    renderProjection();
+  }
+
+  /** Datos de proyección: semanas lun-dom, ritmo y serie a PROJ_N semanas. */
+  function projData() {
+    var list = sorted();
+    if (!window.BTProy) return { error: "noload" };
+    var weeks = window.BTProy.groupWeekly(list);
+    var ritmo = window.BTProy.computeRitmo(weeks);
+    return { weeks: weeks, ritmo: ritmo, base: state.projBase };
+  }
+
+  function renderProjection() {
+    var sumEl = $("projSummary");
+    if (!sumEl || !$("projChart")) return;
+    var list = sorted();
+    if (!list.length) {
+      sumEl.textContent = "Cargá tu primer peso y después apretá Remedir para fijar el punto de partida.";
+      drawProjEmpty("Sin datos todavía.");
+      return;
+    }
+    if (!state.projBase) {
+      sumEl.textContent = "Apretá Remedir para fijar tu última medición como punto de partida.";
+      drawProjEmpty("Sin punto de partida. Apretá Remedir.");
+      return;
+    }
+    var d = projData();
+    if (!d.weeks || d.weeks.length < 2 || d.ritmo == null) {
+      sumEl.textContent = "Necesitás registros en al menos 2 semanas calendario distintas para calcular el ritmo.";
+      drawProjEmpty("Faltan semanas con datos.");
+      return;
+    }
+    var base = state.projBase;
+    var proj = window.BTProy.projectSeries(base, d.ritmo, PROJ_N);
+    var fin = proj[proj.length - 1];
+    var sign = d.ritmo > 0 ? "+" : d.ritmo < 0 ? "−" : "";
+    sumEl.textContent = "Base " + fmtNum(base.peso) + " kg (" + base.fecha + ") · " +
+      "semanas: " + d.weeks.length + " · ritmo " + sign + fmtNum(Math.abs(d.ritmo)) +
+      " kg/sem · en " + PROJ_N + " sem: " + fmtNum(fin.peso) + " kg";
+    // Reales desde la base en adelante, para contrastar.
+    var reals = list.filter(function (e) { return e.t >= base.t - 12 * 3600000; });
+    drawProjChart(proj, reals);
+  }
+
+  function drawProjEmpty(msg) {
+    var svg = $("projChart");
+    var wrap = $("projWrap");
+    var tip = $("projTip");
+    if (!svg || !wrap) return;
+    var W = Math.max(300, Math.round(wrap.clientWidth || 600));
+    var H = Math.round(clamp(W * 0.4, 220, 360));
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.innerHTML = '<text x="' + W / 2 + '" y="' + H / 2 + '" text-anchor="middle" class="chart-empty">' +
+      esc(msg) + "</text>";
+    if (tip) tip.hidden = true;
+  }
+
+  function drawProjChart(proj, reals) {
+    var svg = $("projChart");
+    var wrap = $("projWrap");
+    var tip = $("projTip");
+    if (!svg || !wrap) return;
+    var W = Math.max(300, Math.round(wrap.clientWidth || 600));
+    var H = Math.round(clamp(W * 0.4, 220, 360));
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+    var pad = { t: 16, r: 16, b: 34, l: 46 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var allY = proj.map(function (p) { return p.peso; })
+      .concat(reals.map(function (e) { return e.peso; }));
+    var xMin = proj[0].t, xMax = proj[proj.length - 1].t;
+    var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
+    var span = Math.max(0.6, yMax - yMin);
+    var yLo = Math.floor((yMin - span * 0.18) * 2) / 2;
+    var yHi = Math.ceil((yMax + span * 0.18) * 2) / 2;
+    if (yHi === yLo) yHi = yLo + 1;
+
+    var X = function (t) { return xMax === xMin ? pad.l + iw / 2 : pad.l + (t - xMin) / (xMax - xMin) * iw; };
+    var Y = function (v) { return pad.t + ih - (v - yLo) / (yHi - yLo) * ih; };
+
+    var g = "";
+    niceTicks(yLo, yHi, 5).forEach(function (v) {
+      var y = Y(v).toFixed(1);
+      g += '<line x1="' + pad.l + '" y1="' + y + '" x2="' + (pad.l + iw) + '" y2="' + y + '" stroke="' + C.grid + '" stroke-width="1"/>';
+      g += '<text x="' + (pad.l - 8) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end" fill="' + C.muted + '" font-size="11">' + fmtNum(v) + "</text>";
+    });
+    proj.forEach(function (p) {
+      if (p.week % 4 !== 0) return;
+      var x = X(p.t).toFixed(1);
+      var dt = new Date(p.t);
+      var lab = (dt.getDate() < 10 ? "0" : "") + dt.getDate() + "/" + (dt.getMonth() + 1 < 10 ? "0" : "") + (dt.getMonth() + 1);
+      g += '<text x="' + x + '" y="' + (pad.t + ih + 20) + '" text-anchor="middle" fill="' + C.muted + '" font-size="11">s' + p.week + " " + lab + "</text>";
+    });
+
+    var projPath = "M" + proj.map(function (p) { return X(p.t).toFixed(1) + " " + Y(p.peso).toFixed(1); }).join(" L");
+    var realPath = reals.length > 1
+      ? "M" + reals.map(function (e) { return X(e.t).toFixed(1) + " " + Y(e.peso).toFixed(1); }).join(" L") : "";
+    var dots = reals.map(function (e) {
+      return '<circle cx="' + X(e.t).toFixed(1) + '" cy="' + Y(e.peso).toFixed(1) + '" r="2.6" fill="' + C.accent + '" stroke="' + C.panel + '" stroke-width="1.4"/>';
+    }).join("");
+
+    svg.innerHTML = g +
+      '<path d="' + projPath + '" fill="none" stroke="' + C.proj + '" stroke-width="2.2" stroke-dasharray="6 4" stroke-linecap="round"/>' +
+      (realPath ? '<path d="' + realPath + '" fill="none" stroke="' + C.accent + '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>' : "") +
+      dots +
+      '<rect class="overlay" x="' + pad.l + '" y="' + pad.t + '" width="' + iw + '" height="' + ih + '" fill="transparent"/>';
+
+    var overlay = svg.querySelector(".overlay");
+    var geom = { X: X, Y: Y, proj: proj, reals: reals, W: W };
+    overlay.addEventListener("mousemove", function (ev) { onProjHover(ev, svg, tip, geom); });
+    overlay.addEventListener("mouseleave", function () { if (tip) tip.hidden = true; });
+  }
+
+  function onProjHover(ev, svg, tip, geom) {
+    if (!tip) return;
+    var rect = svg.getBoundingClientRect();
+    var x = ev.clientX - rect.left;
+    var best = geom.proj[0], bestD = Infinity;
+    geom.proj.forEach(function (p) {
+      var dd = Math.abs(geom.X(p.t) - x);
+      if (dd < bestD) { bestD = dd; best = p; }
+    });
+    var real = null, rd = Infinity;
+    geom.reals.forEach(function (e) {
+      var dd = Math.abs(geom.X(e.t) - x);
+      if (dd < rd) { rd = dd; real = e; }
+    });
+    tip.innerHTML = "<b>s" + best.week + " · " + fmtNum(best.peso) + " kg</b> proy." +
+      (real && rd < 40 ? "<br>" + fmtNum(real.peso) + " kg real · " + esc(real.fecha) : "");
+    tip.hidden = false;
+    tip.style.left = clamp(geom.X(best.t), 56, geom.W - 56) + "px";
+    tip.style.top = geom.Y(best.peso) + "px";
   }
 
   /* ───────────────── Utilidades ───────────────── */

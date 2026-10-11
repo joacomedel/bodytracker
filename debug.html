@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BodyTracker — diagnóstico</title>
+<style>
+  body { font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 20px; background: #f4f5f3; color: #14161b; }
+  h1 { font-size: 1.15rem; margin: 0 0 6px; }
+  p { margin: 0 0 14px; color: #444; }
+  pre { background: #fff; border: 1px solid #e4e7e1; border-radius: 10px; padding: 14px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  .ok { color: #17692f; } .err { color: #a3121f; }
+</style>
+</head>
+<body>
+  <h1>Diagnóstico BodyTracker</h1>
+  <p id="msg">Conectando con el motor…</p>
+  <pre id="out">…</pre>
+
+  <script src="config.js"></script>
+  <script src="bt-core.js"></script>
+  <script>
+    (function () {
+      var out = document.getElementById("out");
+      var msg = document.getElementById("msg");
+      function show(o) { out.textContent = (typeof o === "string") ? o : JSON.stringify(o, null, 2); }
+
+      function parseLikeApp(e) {
+        // Misma lógica que app.js (normalize), para comparar.
+        function toNum(v) { if (v == null) return null; var n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? null : n; }
+        function fmtFecha(v) {
+          if (v == null) return "";
+          if (Object.prototype.toString.call(v) === "[object Date]") {
+            var d = v, dd = String(d.getDate()), mm = String(d.getMonth() + 1);
+            return (dd.length < 2 ? "0" + dd : dd) + "/" + (mm.length < 2 ? "0" + mm : mm) + "/" + d.getFullYear();
+          }
+          var s = String(v).trim(), iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (iso) return iso[3] + "/" + iso[2] + "/" + iso[1];
+          return s;
+        }
+        var peso = toNum(e.peso); if (peso == null) return null;
+        var fecha = fmtFecha(e.fecha), hora = e.hora == null ? "" : String(e.hora);
+        var parts = fecha.split("/"), t = null;
+        if (parts.length === 3) {
+          var hm = hora.split(":");
+          var hh = (hm[0] === "" || hm[0] === undefined) ? 12 : (+hm[0] || 0);
+          var d = new Date(+parts[2], +parts[1] - 1, +parts[0], hh, +hm[1] || 0);
+          t = isNaN(d.getTime()) ? null : d.getTime();
+        }
+        return { t: t, fecha: fecha, hora: hora, peso: peso };
+      }
+
+      bt.init({
+        brand: "Diagnóstico",
+        onLocked: function () { msg.textContent = "Sin acceso: iniciá sesión en la app y recargá esta página."; },
+        onReady: function () {
+          msg.textContent = "Consultando dominio pesos…";
+          bt.query("pesos", { limite: 500 }).then(function (res) {
+            if (!res || !res.ok) { msg.innerHTML = '<span class="err">Error: ' + ((res && res.error) || "?") + '</span>'; show(res); return; }
+            var f = res.filas || [];
+            var parsed = f.map(parseLikeApp).filter(Boolean).sort(function (a, b) { return a.t - b.t; });
+            var last = parsed[parsed.length - 1], prev = parsed[parsed.length - 2];
+            msg.innerHTML = '<span class="ok">Total filas devueltas: ' + f.length + ' · filas que la app puede ordenar: ' + parsed.length + '</span>';
+            show({
+              filas_del_motor: f.length,
+              filas_que_usa_la_app: parsed.length,
+              primeras3_crudas: f.slice(0, 3),
+              ultimas3_crudas: f.slice(-3),
+              app_ultimo: last && { fecha: last.fecha, peso: last.peso },
+              app_anterior: prev && { fecha: prev.fecha, peso: prev.peso },
+              app_dias_entre_ultimos: (last && prev) ? Math.round((last.t - prev.t) / 86400000) : null
+            });
+          }).catch(function (e) { msg.innerHTML = '<span class="err">Falló la consulta: ' + e + '</span>'; });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
