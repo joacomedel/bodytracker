@@ -223,9 +223,10 @@
     });
   }
 
-  function becomeReady() {
+  function becomeReady(dominos) {
     ready = true;
-    return api.domains().then(function (res) {
+    var p = dominos ? Promise.resolve({ ok: true, dominios: dominos }) : api.domains();
+    return p.then(function (res) {
       var doms = (res && res.dominios) || [];
       if (opts.onReady) opts.onReady({ dominios: doms });
       return res;
@@ -237,7 +238,7 @@
     booted = true;
     if (!device) return Promise.resolve(openGate());
     return api.domains().then(function (res) {
-      if (res && res.ok) { hideGate(); return becomeReady(); }
+      if (res && res.ok) { hideGate(); return becomeReady(res.dominios); }
       if (res && res.error === "dispositivo no autorizado") { forget(); return openGate(); }
       return openGate();
     }).catch(function () { return openGate(); });
