@@ -1,37 +1,40 @@
 # BodyTracker
 
 Pequeña app web (GitHub Pages) para registrar el peso del día y ver la evolución.
-Los datos viven en tu **Google Sheet**; la app solo lee y agrega registros a través de un Web App de Apps Script.
+Los datos viven en tu **Google Sheet**; la app lee y agrega registros a través de un Web App de Apps Script.
 
 ```
-Navegador (esta página)  ──fetch──▶  Apps Script (/exec)  ──▶  hoja "Datos"
+Navegador (esta página)  ──fetch POST──▶  Apps Script (/exec)  ──▶  hoja "Datos"
 ```
+
+## Acceso
+
+- La **primera vez** te pide **crear una contraseña**.
+- En cada **dispositivo nuevo** te pide la contraseña **una vez**; el dispositivo recibe una **clave única** que se guarda en su navegador y no vuelve a pedir nada.
+- Todas las operaciones requieren una clave de dispositivo válida.
+- El repo **no guarda ningún secreto** (la contraseña se valida y guarda hasheada del lado de Apps Script).
 
 ## Archivos
 
-- `index.html` — estructura
+- `index.html` — estructura (incluye la pantalla de acceso)
 - `styles.css` — diseño
-- `app.js` — lógica (fetch + gráfico SVG + historial)
-- `config.js` — la URL del script y el token compartido
+- `app.js` — lógica (acceso, fetch y gráfico SVG)
+- `config.js` — solo la URL del Web App
 
 ## Configuración
-
-Todo lo que hay que ajustar está en `config.js`:
 
 ```js
 window.BT_CONFIG = {
   SCRIPT_URL: ".../exec",
-  TOKEN: "bt_...",
 };
 ```
 
 - **SCRIPT_URL**: la URL `/exec` del Web App de Apps Script.
-- **TOKEN**: debe coincidir con `WEB_SECRET` en el script.
-
-> La página es pública y lleva la URL + el token a la vista. Alcanza para uso personal (evita que terceros escriban por accidente). No la uses para datos sensibles de terceros.
 
 ## Publicar en GitHub Pages
 
 1. Subir estos archivos a un repo.
 2. Settings → Pages → Source: `main` / `/ (root)`.
 3. Queda en `https://<usuario>.github.io/<repo>/`.
+
+> El Web App de Apps Script queda **fijado a la versión desplegada**: si cambiás `Code.gs`, hay que sacar una **Nueva versión** del deploy para que la página lo use.
