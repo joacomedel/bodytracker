@@ -13,32 +13,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B49E0'/%3E%3Cpath d='M6 21l5-6 4 3 5-8 6 6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <!-- Pantalla de acceso (dispositivo nuevo) -->
-  <section class="gate" id="gate" hidden>
-    <div class="gate-card">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">BodyTracker</span>
-      </div>
-      <h1 class="gate-title" id="gateTitle">Entrar</h1>
-      <p class="gate-sub" id="gateSub">Ingresá la contraseña para ver tus datos.</p>
-      <form id="gateForm" novalidate>
-        <div class="field">
-          <label for="gatePass" id="gatePassLabel">Contraseña</label>
-          <input id="gatePass" type="password" autocomplete="current-password" />
-        </div>
-        <div class="field" id="gateNameField">
-          <label for="gateName">Nombre de este dispositivo <span class="opt">opcional</span></label>
-          <input id="gateName" type="text" maxlength="20" placeholder="celu" autocomplete="off" />
-        </div>
-        <button class="save" id="gateBtn" type="submit">Entrar</button>
-        <p class="log-status" id="gateStatus" role="status" aria-live="polite"></p>
-      </form>
-      <button class="gate-link" id="gateReset" type="button" hidden>Cerrar sesión en todos los dispositivos</button>
-    </div>
-  </section>
-
-  <!-- App (una vez autorizado) -->
+  <!-- App (una vez autorizado). El acceso lo inyecta bt-core.js. -->
   <div id="appRoot" hidden>
     <header class="topbar">
       <div class="brand">
@@ -125,6 +100,7 @@
   </noscript>
 
   <script src="config.js"></script>
+  <script src="bt-core.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

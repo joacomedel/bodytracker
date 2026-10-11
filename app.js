@@ -1,13 +1,10 @@
-/* BodyTracker — lógica de la app (auth por dispositivo + fetch a Apps Script). */
+/* BodyTracker — lógica de la app. El ACCESO y las llamadas las maneja bt-core.js
+ * (dominio "pesos" del backend bds). Acá queda la vista: formulario, gráfico, etc. */
 (function () {
   "use strict";
 
-  var cfg = window.BT_CONFIG || {};
-  var LS_KEY = "bt_device";
+  var DOMINIO = "pesos";
   var state = { entries: [], range: "all" };
-  var device = "";
-  try { device = localStorage.getItem(LS_KEY) || ""; } catch (e) { device = ""; }
-  var gateMode = "login";
 
   var C = { grid: "#eceee9", muted: "#8b9199", ink: "#14161b", accent: "#2b49e0", panel: "#ffffff", tint: "#e9ecfb" };
   var HISTORY_N = 15;
@@ -18,9 +15,7 @@
 
   function init() {
     $("logForm").addEventListener("submit", onSubmit);
-    $("gateForm").addEventListener("submit", onGateSubmit);
     $("logoutBtn").addEventListener("click", onLogout);
-    $("gateReset").addEventListener("click", onResetAll);
     var rangeButtons = document.querySelectorAll("#range button");
     rangeButtons.forEach(function (b) {
       b.addEventListener("click", function () {
@@ -30,143 +25,61 @@
       });
     });
     window.addEventListener("resize", debounce(renderChart, 150));
-    boot();
-  }
 
-  /* ───────────────── API ───────────────── */
-
-  function api(payload) {
-    return fetch(cfg.SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); });
-  }
-
-  /* ───────────────── Arranque / acceso ───────────────── */
-
-  function boot() {
-    if (!device) { openGate(); return; }
-    api({ action: "data", device: device }).then(function (res) {
-      if (res && res.ok) { unlock(); applyData(res); }
-      else if (res && res.error === "dispositivo no autorizado") { forget(); openGate(); }
-      else { openGate(); setGateStatus("No pude conectar. Reintentá en un rato.", "error"); }
-    }).catch(function () {
-      openGate();
-      setGateStatus("No pude conectar. Reintentá en un rato.", "error");
+    // bt-core muestra el gate si hace falta y llama a onReady cuando hay acceso.
+    bt.init({
+      brand: "BodyTracker",
+      onReady: function () { $("appRoot").hidden = false; refresh(); },
+      onLocked: function () { $("appRoot").hidden = true; }
     });
-  }
-
-  function unlock() { $("gate").hidden = true; $("appRoot").hidden = false; }
-
-  function openGate() {
-    $("appRoot").hidden = true;
-    $("gate").hidden = false;
-    api({ action: "status" }).then(function (st) {
-      if (!st || !st.ok) { setGateMode("login"); setGateStatus("No pude conectar.", "error"); return; }
-      setGateMode(st.configured ? "login" : "setpass");
-    }).catch(function () {
-      setGateMode("login");
-      setGateStatus("No pude conectar.", "error");
-    });
-  }
-
-  function setGateMode(mode) {
-    gateMode = mode;
-    var isSet = mode === "setpass";
-    $("gateTitle").textContent = isSet ? "Creá tu contraseña" : "Entrar";
-    $("gateSub").textContent = isSet
-      ? "Primera vez. Elegí una contraseña: la vas a usar para autorizar cada dispositivo nuevo (después queda recordado)."
-      : "Ingresá la contraseña para ver tus datos.";
-    $("gateBtn").textContent = isSet ? "Crear y entrar" : "Entrar";
-    $("gatePass").setAttribute("autocomplete", isSet ? "new-password" : "current-password");
-    $("gateNameField").hidden = isSet;
-    $("gateReset").hidden = !(mode === "login");
-    $("gatePass").value = "";
-    setGateStatus("");
-  }
-
-  function setGateStatus(msg, kind) {
-    var el = $("gateStatus");
-    el.textContent = msg || "";
-    el.classList.toggle("is-error", kind === "error");
-    el.classList.toggle("is-ok", kind === "ok");
-  }
-
-  function onGateSubmit(ev) {
-    ev.preventDefault();
-    var pass = $("gatePass").value;
-    if (!pass) { setGateStatus("Escribí la contraseña.", "error"); return; }
-    var payload;
-    if (gateMode === "setpass") {
-      if (pass.length < 6) { setGateStatus("Mínimo 6 caracteres.", "error"); return; }
-      payload = { action: "setPassword", password: pass };
-    } else {
-      payload = { action: "login", password: pass, name: $("gateName").value.trim() };
-    }
-    var btn = $("gateBtn");
-    btn.disabled = true;
-    setGateStatus("Verificando…", "");
-    api(payload).then(function (res) {
-      if (res && res.ok && res.device) {
-        remember(res.device);
-        unlock();
-        setGateStatus("");
-        return refresh();
-      }
-      setGateStatus((res && res.error) || "No se pudo. Probá de nuevo.", "error");
-    }).catch(function () {
-      setGateStatus("No pude conectar. Reintentá.", "error");
-    }).then(function () { btn.disabled = false; });
   }
 
   function onLogout() {
-    var d = device;
-    forget();
-    openGate();
-    if (d) api({ action: "logout", device: d }).catch(function () {});
+    $("appRoot").hidden = true;
+    bt.logout();
   }
 
-  function onResetAll() {
-    var pass = window.prompt("Contraseña para cerrar sesión en TODOS los dispositivos:");
-    if (!pass) return;
-    setGateStatus("Cerrando todas…", "");
-    api({ action: "logoutAll", password: pass }).then(function (res) {
-      if (res && res.ok) { forget(); setGateStatus("Listo: cerraste sesión en todos los dispositivos.", "ok"); }
-      else setGateStatus((res && res.error) || "No se pudo.", "error");
-    }).catch(function () { setGateStatus("No pude conectar.", "error"); });
-  }
-
-  function remember(t) { device = t; try { localStorage.setItem(LS_KEY, t); } catch (e) {} }
-  function forget() { device = ""; try { localStorage.removeItem(LS_KEY); } catch (e) {} }
+  /* ───────────────── Datos (vía bt-core) ───────────────── */
 
   function refresh() {
-    return api({ action: "data", device: device }).then(function (res) {
-      if (res && res.ok) applyData(res);
-      else if (res && res.error === "dispositivo no autorizado") { forget(); openGate(); }
+    return bt.query(DOMINIO, { limite: 500 }).then(function (res) {
+      if (res && res.ok) applyData(res.filas || []);
       return res;
-    });
+    }).catch(function (err) { console.error(err); });
   }
 
-  /* ───────────────── Datos ───────────────── */
-
-  function applyData(res) {
-    state.entries = (res.entries || []).map(normalize).filter(Boolean);
-    renderAll(res.updated);
+  function applyData(filas) {
+    state.entries = filas.map(normalize).filter(Boolean);
+    renderAll(new Date().toISOString());
   }
 
   function normalize(e) {
     var peso = toNum(e.peso);
     if (peso == null) return null;
-    var parts = String(e.fecha || "").split("/");
+    var fecha = fmtFecha(e.fecha);
+    var hora = e.hora == null ? "" : String(e.hora);
+    var parts = fecha.split("/");
     var t = null;
     if (parts.length === 3) {
-      var hm = String(e.hora || "").split(":");
-      var hh = hm[0] === "" || hm[0] === undefined ? 12 : (+hm[0] || 0); // sin hora → mediodía
+      var hm = hora.split(":");
+      var hh = hm[0] === "" || hm[0] === undefined ? 12 : (+hm[0] || 0);
       var d = new Date(+parts[2], +parts[1] - 1, +parts[0], hh, +hm[1] || 0);
       t = isNaN(d.getTime()) ? null : d.getTime();
     }
-    return { t: t, fecha: e.fecha || "", hora: e.hora || "", peso: peso, nota: e.comentario || "" };
+    return { t: t, fecha: fecha, hora: hora, peso: peso, nota: e.comentario || "" };
+  }
+
+  /** El motor devuelve la fecha como dd/MM/yyyy; si viniera como Date/ISO, la normaliza. */
+  function fmtFecha(v) {
+    if (v == null) return "";
+    if (Object.prototype.toString.call(v) === "[object Date]") {
+      var d = v, dd = String(d.getDate()), mm = String(d.getMonth() + 1);
+      return (dd.length < 2 ? "0" + dd : dd) + "/" + (mm.length < 2 ? "0" + mm : mm) + "/" + d.getFullYear();
+    }
+    var s = String(v).trim();
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return iso[3] + "/" + iso[2] + "/" + iso[1];
+    return s;
   }
 
   function sorted() {
@@ -197,13 +110,15 @@
     var comment = $("comment").value.trim();
     btn.disabled = true;
     setStatus("Guardando…", "");
-    api({ action: "save", device: device, weight: w, comment: comment })
+    bt.append(DOMINIO, { peso: w, comentario: comment })
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || "no se pudo guardar");
         input.value = "";
         $("comment").value = "";
+        var fila = data.fila || {};
         return refresh().then(function () {
-          setStatus("Listo — " + fmtNum(data.weight) + " kg, " + data.fecha + " " + (data.hora || "").slice(0, 5) + " ✓", "ok");
+          setStatus("Listo — " + fmtNum(toNum(fila.peso) || w) + " kg, " + (fila.fecha || "") + " " +
+            String(fila.hora || "").slice(0, 5) + " ✓", "ok");
         });
       })
       .catch(function (err) {
