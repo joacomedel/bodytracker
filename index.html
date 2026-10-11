@@ -13,81 +13,112 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B49E0'/%3E%3Cpath d='M6 21l5-6 4 3 5-8 6 6' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">BodyTracker</span>
-    </div>
-    <p class="updated" id="updated">—</p>
-  </header>
-
-  <main>
-    <section class="hero" aria-labelledby="heroTitle">
-      <div class="readout">
-        <h1 class="readout-label" id="heroTitle">Peso actual</h1>
-        <p class="readout-value">
-          <span id="currentWeight">—</span><span class="unit">kg</span>
-        </p>
-        <p class="readout-delta" id="currentDelta">Sin datos todavía.</p>
+  <!-- Pantalla de acceso (dispositivo nuevo) -->
+  <section class="gate" id="gate" hidden>
+    <div class="gate-card">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">BodyTracker</span>
       </div>
-
-      <form class="log" id="logForm" novalidate>
-        <h2 class="log-title">Registrar</h2>
-        <div class="log-fields">
-          <div class="field">
-            <label for="weight">Peso (kg)</label>
-            <input id="weight" name="weight" type="text" inputmode="decimal" autocomplete="off"
-                   placeholder="65,4" aria-describedby="logStatus" />
-          </div>
-          <div class="field">
-            <label for="comment">Nota <span class="opt">opcional</span></label>
-            <input id="comment" name="comment" type="text" maxlength="60" autocomplete="off"
-                   placeholder="post ayuno" />
-          </div>
+      <h1 class="gate-title" id="gateTitle">Entrar</h1>
+      <p class="gate-sub" id="gateSub">Ingresá la contraseña para ver tus datos.</p>
+      <form id="gateForm" novalidate>
+        <div class="field">
+          <label for="gatePass" id="gatePassLabel">Contraseña</label>
+          <input id="gatePass" type="password" autocomplete="current-password" />
         </div>
-        <button type="submit" class="save" id="saveBtn">Guardar</button>
-        <p class="log-status" id="logStatus" role="status" aria-live="polite"></p>
+        <div class="field" id="gateNameField">
+          <label for="gateName">Nombre de este dispositivo <span class="opt">opcional</span></label>
+          <input id="gateName" type="text" maxlength="20" placeholder="celu" autocomplete="off" />
+        </div>
+        <button class="save" id="gateBtn" type="submit">Entrar</button>
+        <p class="log-status" id="gateStatus" role="status" aria-live="polite"></p>
       </form>
-    </section>
+      <button class="gate-link" id="gateReset" type="button" hidden>Cerrar sesión en todos los dispositivos</button>
+    </div>
+  </section>
 
-    <section class="chart-panel" aria-labelledby="chartTitle">
-      <div class="chart-head">
-        <h2 id="chartTitle">Evolución</h2>
-        <div class="range" id="range" role="group" aria-label="Rango de tiempo">
-          <button type="button" data-range="30">30 días</button>
-          <button type="button" data-range="90">90 días</button>
-          <button type="button" data-range="all" class="is-active">Todo</button>
+  <!-- App (una vez autorizado) -->
+  <div id="appRoot" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">BodyTracker</span>
+      </div>
+      <div class="topbar-right">
+        <p class="updated" id="updated">—</p>
+        <button class="logout" id="logoutBtn" type="button" title="Olvidar este dispositivo">Salir</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="heroTitle">
+        <div class="readout">
+          <h1 class="readout-label" id="heroTitle">Peso actual</h1>
+          <p class="readout-value">
+            <span id="currentWeight">—</span><span class="unit">kg</span>
+          </p>
+          <p class="readout-delta" id="currentDelta">Sin datos todavía.</p>
         </div>
-      </div>
-      <div class="chart-wrap" id="chartWrap">
-        <svg id="chart" role="img" aria-label="Gráfico de evolución del peso"></svg>
-        <div class="tooltip" id="tooltip" hidden></div>
-      </div>
-      <ul class="legend">
-        <li><span class="k k-line"></span> peso</li>
-        <li><span class="k k-avg"></span> promedio 7</li>
-      </ul>
-    </section>
 
-    <section class="stats" id="stats" aria-label="Resumen"></section>
+        <form class="log" id="logForm" novalidate>
+          <h2 class="log-title">Registrar</h2>
+          <div class="log-fields">
+            <div class="field">
+              <label for="weight">Peso (kg)</label>
+              <input id="weight" name="weight" type="text" inputmode="decimal" autocomplete="off"
+                     placeholder="65,4" aria-describedby="logStatus" />
+            </div>
+            <div class="field">
+              <label for="comment">Nota <span class="opt">opcional</span></label>
+              <input id="comment" name="comment" type="text" maxlength="60" autocomplete="off"
+                     placeholder="post ayuno" />
+            </div>
+          </div>
+          <button type="submit" class="save" id="saveBtn">Guardar</button>
+          <p class="log-status" id="logStatus" role="status" aria-live="polite"></p>
+        </form>
+      </section>
 
-    <section class="history" aria-labelledby="histTitle">
-      <div class="history-head">
-        <h2 id="histTitle">Historial</h2>
-        <p class="history-note">Últimos registros</p>
-      </div>
-      <table id="historyTable">
-        <thead>
-          <tr><th scope="col">Fecha</th><th scope="col" class="num">Peso</th><th scope="col" class="num">Cambio</th><th scope="col">Nota</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </main>
+      <section class="chart-panel" aria-labelledby="chartTitle">
+        <div class="chart-head">
+          <h2 id="chartTitle">Evolución</h2>
+          <div class="range" id="range" role="group" aria-label="Rango de tiempo">
+            <button type="button" data-range="30">30 días</button>
+            <button type="button" data-range="90">90 días</button>
+            <button type="button" data-range="all" class="is-active">Todo</button>
+          </div>
+        </div>
+        <div class="chart-wrap" id="chartWrap">
+          <svg id="chart" role="img" aria-label="Gráfico de evolución del peso"></svg>
+          <div class="tooltip" id="tooltip" hidden></div>
+        </div>
+        <ul class="legend">
+          <li><span class="k k-line"></span> peso</li>
+          <li><span class="k k-avg"></span> promedio 7</li>
+        </ul>
+      </section>
 
-  <footer>
-    <p>Los datos viven en tu Google Sheet. Esta página solo los muestra y agrega registros.</p>
-  </footer>
+      <section class="stats" id="stats" aria-label="Resumen"></section>
+
+      <section class="history" aria-labelledby="histTitle">
+        <div class="history-head">
+          <h2 id="histTitle">Historial</h2>
+          <p class="history-note">Últimos registros</p>
+        </div>
+        <table id="historyTable">
+          <thead>
+            <tr><th scope="col">Fecha</th><th scope="col" class="num">Peso</th><th scope="col" class="num">Cambio</th><th scope="col">Nota</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer>
+      <p>Los datos viven en tu Google Sheet. Esta página solo los muestra y agrega registros.</p>
+    </footer>
+  </div>
 
   <noscript>
     <p class="noscript">Necesitás JavaScript activado para usar BodyTracker.</p>

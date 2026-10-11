@@ -1,9 +1,14 @@
-/* BodyTracker — lógica de la app (fetch a Apps Script + render). */
+/* BodyTracker — lógica de la app (auth por dispositivo + fetch a Apps Script). */
 (function () {
   "use strict";
 
   var cfg = window.BT_CONFIG || {};
+  var LS_KEY = "bt_device";
   var state = { entries: [], range: "all" };
+  var device = "";
+  try { device = localStorage.getItem(LS_KEY) || ""; } catch (e) { device = ""; }
+  var gateMode = "login";
+
   var C = { grid: "#eceee9", muted: "#8b9199", ink: "#14161b", accent: "#2b49e0", panel: "#ffffff", tint: "#e9ecfb" };
   var HISTORY_N = 15;
 
@@ -13,6 +18,9 @@
 
   function init() {
     $("logForm").addEventListener("submit", onSubmit);
+    $("gateForm").addEventListener("submit", onGateSubmit);
+    $("logoutBtn").addEventListener("click", onLogout);
+    $("gateReset").addEventListener("click", onResetAll);
     var rangeButtons = document.querySelectorAll("#range button");
     rangeButtons.forEach(function (b) {
       b.addEventListener("click", function () {
@@ -22,26 +30,129 @@
       });
     });
     window.addEventListener("resize", debounce(renderChart, 150));
-    load();
+    boot();
+  }
+
+  /* ───────────────── API ───────────────── */
+
+  function api(payload) {
+    return fetch(cfg.SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); });
+  }
+
+  /* ───────────────── Arranque / acceso ───────────────── */
+
+  function boot() {
+    if (!device) { openGate(); return; }
+    api({ action: "data", device: device }).then(function (res) {
+      if (res && res.ok) { unlock(); applyData(res); }
+      else if (res && res.error === "dispositivo no autorizado") { forget(); openGate(); }
+      else { openGate(); setGateStatus("No pude conectar. Reintentá en un rato.", "error"); }
+    }).catch(function () {
+      openGate();
+      setGateStatus("No pude conectar. Reintentá en un rato.", "error");
+    });
+  }
+
+  function unlock() { $("gate").hidden = true; $("appRoot").hidden = false; }
+
+  function openGate() {
+    $("appRoot").hidden = true;
+    $("gate").hidden = false;
+    api({ action: "status" }).then(function (st) {
+      if (!st || !st.ok) { setGateMode("login"); setGateStatus("No pude conectar.", "error"); return; }
+      setGateMode(st.configured ? "login" : "setpass");
+    }).catch(function () {
+      setGateMode("login");
+      setGateStatus("No pude conectar.", "error");
+    });
+  }
+
+  function setGateMode(mode) {
+    gateMode = mode;
+    var isSet = mode === "setpass";
+    $("gateTitle").textContent = isSet ? "Creá tu contraseña" : "Entrar";
+    $("gateSub").textContent = isSet
+      ? "Primera vez. Elegí una contraseña: la vas a usar para autorizar cada dispositivo nuevo (después queda recordado)."
+      : "Ingresá la contraseña para ver tus datos.";
+    $("gateBtn").textContent = isSet ? "Crear y entrar" : "Entrar";
+    $("gatePass").setAttribute("autocomplete", isSet ? "new-password" : "current-password");
+    $("gateNameField").hidden = isSet;
+    $("gateReset").hidden = !(mode === "login");
+    $("gatePass").value = "";
+    setGateStatus("");
+  }
+
+  function setGateStatus(msg, kind) {
+    var el = $("gateStatus");
+    el.textContent = msg || "";
+    el.classList.toggle("is-error", kind === "error");
+    el.classList.toggle("is-ok", kind === "ok");
+  }
+
+  function onGateSubmit(ev) {
+    ev.preventDefault();
+    var pass = $("gatePass").value;
+    if (!pass) { setGateStatus("Escribí la contraseña.", "error"); return; }
+    var payload;
+    if (gateMode === "setpass") {
+      if (pass.length < 6) { setGateStatus("Mínimo 6 caracteres.", "error"); return; }
+      payload = { action: "setPassword", password: pass };
+    } else {
+      payload = { action: "login", password: pass, name: $("gateName").value.trim() };
+    }
+    var btn = $("gateBtn");
+    btn.disabled = true;
+    setGateStatus("Verificando…", "");
+    api(payload).then(function (res) {
+      if (res && res.ok && res.device) {
+        remember(res.device);
+        unlock();
+        setGateStatus("");
+        return refresh();
+      }
+      setGateStatus((res && res.error) || "No se pudo. Probá de nuevo.", "error");
+    }).catch(function () {
+      setGateStatus("No pude conectar. Reintentá.", "error");
+    }).then(function () { btn.disabled = false; });
+  }
+
+  function onLogout() {
+    var d = device;
+    forget();
+    openGate();
+    if (d) api({ action: "logout", device: d }).catch(function () {});
+  }
+
+  function onResetAll() {
+    var pass = window.prompt("Contraseña para cerrar sesión en TODOS los dispositivos:");
+    if (!pass) return;
+    setGateStatus("Cerrando todas…", "");
+    api({ action: "logoutAll", password: pass }).then(function (res) {
+      if (res && res.ok) { forget(); setGateStatus("Listo: cerraste sesión en todos los dispositivos.", "ok"); }
+      else setGateStatus((res && res.error) || "No se pudo.", "error");
+    }).catch(function () { setGateStatus("No pude conectar.", "error"); });
+  }
+
+  function remember(t) { device = t; try { localStorage.setItem(LS_KEY, t); } catch (e) {} }
+  function forget() { device = ""; try { localStorage.removeItem(LS_KEY); } catch (e) {} }
+
+  function refresh() {
+    return api({ action: "data", device: device }).then(function (res) {
+      if (res && res.ok) applyData(res);
+      else if (res && res.error === "dispositivo no autorizado") { forget(); openGate(); }
+      return res;
+    });
   }
 
   /* ───────────────── Datos ───────────────── */
 
-  function load() {
-    var url = cfg.SCRIPT_URL + "?action=data&token=" + encodeURIComponent(cfg.TOKEN) + "&t=" + Date.now();
-    return fetch(url, { method: "GET" })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || !data.ok) throw new Error((data && data.error) || "respuesta inválida");
-        state.entries = (data.entries || []).map(normalize).filter(Boolean);
-        renderAll(data.updated);
-        return true;
-      })
-      .catch(function (err) {
-        console.error(err);
-        setStatus("No pude cargar tus datos. Revisá la conexión y recargá.", "error");
-        return false;
-      });
+  function applyData(res) {
+    state.entries = (res.entries || []).map(normalize).filter(Boolean);
+    renderAll(res.updated);
   }
 
   function normalize(e) {
@@ -86,17 +197,12 @@
     var comment = $("comment").value.trim();
     btn.disabled = true;
     setStatus("Guardando…", "");
-    fetch(cfg.SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ token: cfg.TOKEN, weight: w, comment: comment })
-    })
-      .then(function (r) { return r.json(); })
+    api({ action: "save", device: device, weight: w, comment: comment })
       .then(function (data) {
         if (!data || !data.ok) throw new Error((data && data.error) || "no se pudo guardar");
         input.value = "";
         $("comment").value = "";
-        return load().then(function () {
+        return refresh().then(function () {
           setStatus("Listo — " + fmtNum(data.weight) + " kg, " + data.fecha + " " + (data.hora || "").slice(0, 5) + " ✓", "ok");
         });
       })
